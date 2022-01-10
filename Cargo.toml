@@ -11,3 +11,4 @@ serde = {version = "1.0.130", features=["derive"]}
 actix-web = "3"
 actix-multipart = "0.3.0"
 futures = "0.3.19"
+anyhow = "1.0.52"

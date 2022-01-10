@@ -6,12 +6,7 @@ mod db;
 mod api;
 
 
-
-struct APIContainer<'a>{
-    db: Mutex<db::MyApp<'a>>
-}
-
-async fn send_db(data: web::Data<APIContainer<'_>>) ->String{
+async fn send_db(data: web::Data<api::APIContainer<'_>>) ->String{
     let db_str = data.db.lock().unwrap().get_database_as_string();
     db_str
 }
@@ -46,7 +41,7 @@ async fn main() -> std::io::Result<()>{
 
     //println!("{:?}",std::fs::create_dir("./test"));
 
-    let actix_db = web::Data::new(APIContainer{
+    let actix_db = web::Data::new(api::APIContainer{
         db: Mutex::new(app)
     });
     
@@ -59,6 +54,7 @@ async fn main() -> std::io::Result<()>{
         .service(api::route_function_example)
         .route("/hey", web::get().to(manual_hello))
         .route("/API", web::get().to(send_db))
+        .service(api::get_whole_db)
     })
     .bind("127.0.0.1:8080")?
     .run()
