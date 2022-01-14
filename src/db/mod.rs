@@ -1,6 +1,7 @@
 use std::path::Path;
 use serde::{Deserialize, Serialize};
 use std::io::prelude::*;
+use anyhow::Result;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct Date{
@@ -65,11 +66,12 @@ impl<'a> MyApp<'a>{
 
     pub fn init(&mut self){
         self.prepare_database();
+        self.next_id = self.projects.iter().map(|p| p.id).max().unwrap_or(0) + 1;
     }
 
-    pub fn prepare_database(&self){
+    pub fn prepare_database(&mut self){
         match std::fs::read_dir(self.db_path){
-            Ok(db) => println!("Database found: {:?}", db),
+            Ok(_) => self.load_projects(),
             Err(e) => match e.kind(){
                 std::io::ErrorKind::NotFound => match std::fs::create_dir(self.db_path){
                     Ok(_) => println!("Database created!"), 
@@ -93,18 +95,20 @@ impl<'a> MyApp<'a>{
         self.projects.iter_mut().filter(|pr| pr.id == id).next()
     }
 
-    pub fn add_project(&mut self, project: &ProjectInfo){
+    pub fn add_project(&mut self, project: &ProjectInfo) -> Result<()>{
         let mut project = project.clone();
         project.id = self.next_id;
         self.next_id += 1;
         self.projects.push(project.clone());
+        Ok(())
     }
 
-    pub fn update_project(&mut self, id: usize, project: &ProjectInfo){
+    pub fn update_project(&mut self, id: usize, project: &ProjectInfo) -> Result<()>{
         match self.get_mut_project_by_id(id){
             Some(pr) => *pr = project.clone(),
-            None => self.add_project(project)
+            None => self.add_project(project)?
         };
+        Ok(())
     }
 
     pub fn overrite_save_database(&self){
@@ -123,6 +127,11 @@ impl<'a> MyApp<'a>{
             Some(pr) => pr.files_names = filepath.to_str().unwrap().to_owned(),
             None => ()
         }
+    }
+
+    //Not unsafe per definition, but can break compability between database backups
+    pub unsafe fn reinitialize_ids(&mut self){
+        self.projects.iter_mut().enumerate().for_each(|(n,p)| p.id=n);
     }
 
 }

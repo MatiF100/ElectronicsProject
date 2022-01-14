@@ -1,6 +1,7 @@
 use std::sync::Mutex;
 
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_cors::Cors;
 
 mod db;
 mod api;
@@ -26,9 +27,10 @@ async fn main() -> std::io::Result<()>{
     };
 
     let mut app = db::MyApp::new();
-    app.add_project(&test);
-    app.add_project(&test);
-    //app.save_database();
+    app.init();
+    //app.add_project(&test);
+    //app.add_project(&test);
+    //app.overrite_save_database();
 
     //let mut app2 = App::new();
     //app2.load_projects();
@@ -47,14 +49,17 @@ async fn main() -> std::io::Result<()>{
     
     println!("Dupa");
     HttpServer::new(move ||{
-        App::new()
+        App::new().wrap(
+            Cors::default().allow_any_origin().allow_any_header().allow_any_method()
+        )
         .app_data(actix_db.clone())
-        .service(hello)
         .service(echo)
         .service(api::route_function_example)
         .route("/hey", web::get().to(manual_hello))
         .route("/API", web::get().to(send_db))
         .service(api::get_whole_db)
+        .service(api::add_entry)
+        .service(actix_files::Files::new("/", "./utils").index_file("index.html"))
     })
     .bind("127.0.0.1:8080")?
     .run()
