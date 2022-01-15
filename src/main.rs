@@ -1,21 +1,20 @@
 use std::sync::Mutex;
 
-use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use actix_cors::Cors;
+use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 
-mod db;
 mod api;
+mod db;
 
-
-async fn send_db(data: web::Data<api::APIContainer<'_>>) ->String{
+async fn send_db(data: web::Data<api::APIContainer<'_>>) -> String {
     let db_str = data.db.lock().unwrap().get_database_as_string();
     db_str
 }
 
 #[actix_web::main]
-async fn main() -> std::io::Result<()>{
+async fn main() -> std::io::Result<()> {
     //println!("Hello, world!");
-    let test: db::ProjectInfo = db::ProjectInfo{
+    let test: db::ProjectInfo = db::ProjectInfo {
         id: 0,
         author: "Fesz".to_owned(),
         academic_year: 2021,
@@ -23,7 +22,7 @@ async fn main() -> std::io::Result<()>{
         category: String::from("arduino"),
         is_diploma: false,
         title: "Test".to_owned(),
-        files_names: String::from("")
+        files_names: String::from(""),
     };
 
     let mut app = db::MyApp::new();
@@ -43,23 +42,28 @@ async fn main() -> std::io::Result<()>{
 
     //println!("{:?}",std::fs::create_dir("./test"));
 
-    let actix_db = web::Data::new(api::APIContainer{
-        db: Mutex::new(app)
+    let actix_db = web::Data::new(api::APIContainer {
+        db: Mutex::new(app),
     });
-    
-    println!("Dupa");
-    HttpServer::new(move ||{
-        App::new().wrap(
-            Cors::default().allow_any_origin().allow_any_header().allow_any_method()
-        )
-        .app_data(actix_db.clone())
-        .service(echo)
-        .service(api::route_function_example)
-        .route("/hey", web::get().to(manual_hello))
-        .route("/API", web::get().to(send_db))
-        .service(api::get_whole_db)
-        .service(api::add_entry)
-        .service(actix_files::Files::new("/", "./utils").index_file("index.html"))
+
+    println!("Running...");
+    HttpServer::new(move || {
+        App::new()
+            .wrap(
+                Cors::default()
+                    .allow_any_origin()
+                    .allow_any_header()
+                    .allow_any_method(),
+            )
+            .app_data(actix_db.clone())
+            .service(echo)
+            .service(api::save_file)
+            .route("/hey", web::get().to(manual_hello))
+            .route("/API", web::get().to(send_db))
+            .service(api::get_whole_db)
+            .service(api::add_entry)
+            .service(api::get_file_for_project)
+            .service(actix_files::Files::new("/", "./utils").index_file("index.html"))
     })
     .bind("127.0.0.1:8080")?
     .run()
