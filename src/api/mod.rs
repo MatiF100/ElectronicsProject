@@ -23,8 +23,6 @@ async fn save_file(
     let fileparts = filename.to_str().unwrap().split_once("%2F").unwrap();
     let mut payload = payload.into_inner();
 
-    //TODO
-    //let filepath = handle.db_path.join("files").join(&filename.parent().unwrap()).join(&filename.file_name().unwrap());
     let dirpath = handle.db_path.join("files").join(fileparts.0);
     let filepath = dirpath.join(fileparts.1);
 
@@ -43,11 +41,21 @@ async fn save_file(
 
     let id = dirpath
         .file_name()
-        .unwrap()
+        .ok_or(actix_web::Error::from(
+            actix_web::error::InternalError::new(
+                "Invalid filename",
+                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+            ),
+        ))?
         .to_str()
-        .unwrap()
+        .ok_or(actix_web::Error::from(
+            actix_web::error::InternalError::new(
+                "Invalid filename",
+                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+            ),
+        ))?
         .parse::<i32>()
-        .unwrap();
+        .map_err(|_| actix_web::Error::from(actix_web::error::ParseError::Method))?;
     handle.attatch_file(id as usize, &filepath);
 
     Result::<_, actix_web::Error>::Ok("")
@@ -78,19 +86,25 @@ pub async fn get_file_for_project(
     res: web::Path<std::path::PathBuf>,
     database: web::Data<APIContainer<'_>>,
 ) -> Option<HttpResponse> {
+    //TODO: Send file with correct filename
     let handle = database.db.lock().unwrap();
 
     let res = res.into_inner();
     let id = res.file_name()?.to_str()?.parse::<usize>().unwrap();
     let tmp = handle.get_file_path(id)?;
     let filepath = std::path::Path::new(tmp);
-    let file = std::fs::read(&filepath).unwrap();
+    let file = match std::fs::read(&filepath) {
+        Ok(f) => f,
+        Err(e) => return Some(HttpResponse::from_error(actix_web::Error::from(e))),
+    };
 
     let mut resp = HttpResponse::Ok();
     let mime_guess = mime_guess::from_path(&filepath);
     if let Some(mime_guess) = mime_guess.first() {
         resp.content_type(mime_guess.as_ref());
     }
+    let filename = format!("filename=\"{}\"", filepath.file_name()?.to_str()?);
+    resp.header("Content-Disposition", filename);
     Some(resp.body(file))
 }
 
