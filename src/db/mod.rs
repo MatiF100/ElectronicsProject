@@ -2,6 +2,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::io::prelude::*;
 use std::path::Path;
+use std::collections::HashSet;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct Date {
@@ -43,6 +44,7 @@ impl ProjectInfo {
 #[derive(Debug)]
 pub struct MyApp<'a> {
     projects: Vec<ProjectInfo>,
+    categories: HashSet<String>,
     pub db_path: &'a Path,
     next_id: usize,
 }
@@ -51,6 +53,7 @@ impl<'a> MyApp<'a> {
     pub fn new() -> Self {
         Self {
             projects: Vec::new(),
+            categories: HashSet::new(),
             db_path: Path::new("./database"),
             next_id: 0,
         }
@@ -66,7 +69,10 @@ impl<'a> MyApp<'a> {
             Ok(_) => self.load_projects(),
             Err(e) => match e.kind() {
                 std::io::ErrorKind::NotFound => match std::fs::create_dir(self.db_path) {
-                    Ok(_) => println!("Database created!"),
+                    Ok(_) => {
+                            self.overrite_save_database();  
+                            println!("Database created!")
+                    },
                     Err(e) => panic!("Failed to create database! Error: {}", e),
                 },
                 _ => panic!("Failed to open database! Error: {}", e),
@@ -76,7 +82,9 @@ impl<'a> MyApp<'a> {
 
     pub fn load_projects(&mut self) {
         let db = std::fs::read_to_string("./database/db.json").unwrap();
+        let cat = std::fs::read_to_string("./database/cat.json").unwrap();
         self.projects = serde_json::from_str(&db).unwrap();
+        self.categories = serde_json::from_str(&cat).unwrap();
     }
 
     pub fn get_project_by_id(&self, id: usize) -> Option<&ProjectInfo> {
@@ -104,8 +112,11 @@ impl<'a> MyApp<'a> {
 
     pub fn overrite_save_database(&self) {
         let x = serde_json::to_string(&self.projects).unwrap();
+        let y = serde_json::to_string(&self.categories).unwrap();
         let mut db = std::fs::File::create(self.db_path.join(Path::new("db.json"))).unwrap();
+        let mut cat = std::fs::File::create(self.db_path.join(Path::new("cat.json"))).unwrap();
         db.write_all(x.as_bytes()).unwrap();
+        cat.write_all(y.as_bytes()).unwrap();
     }
 
     pub fn get_database_as_string(&self) -> String {
@@ -124,6 +135,14 @@ impl<'a> MyApp<'a> {
             Some(pr) => Some(&pr.files_names),
             None => None,
         }
+    }
+
+    pub fn add_category(&mut self, category: &str){
+        self.categories.insert(category.to_owned());
+    }
+
+    pub fn get_categories(&self) -> &HashSet<String>{
+        &self.categories
     }
 
     //Not unsafe per definition, but can break compability between database backups

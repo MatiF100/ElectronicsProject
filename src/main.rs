@@ -50,10 +50,7 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .wrap(
-                Cors::default()
-                    .allow_any_origin()
-                    .allow_any_header()
-                    .allow_any_method(),
+                Cors::permissive()
             )
             .app_data(actix_db.clone())
             .service(echo)
@@ -63,6 +60,8 @@ async fn main() -> std::io::Result<()> {
             .service(api::get_whole_db)
             .service(api::add_entry)
             .service(api::get_file_for_project)
+            .service(api::get_categories)
+            .service(api::add_category)
             .service(actix_files::Files::new("/", "./utils").index_file("index.html"))
     })
     .bind("127.0.0.1:8080")?

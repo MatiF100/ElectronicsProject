@@ -113,6 +113,41 @@ pub async fn get_whole_db(database: web::Data<APIContainer<'_>>) -> impl Respond
     database.db.lock().unwrap().get_database_as_string()
 }
 
+#[get("/categories")]
+pub async fn get_categories(database: web::Data<APIContainer<'_>>) -> impl Responder {
+    let cats = database.db.lock().unwrap();
+    let mut resp = String::new();
+    for cat in cats.get_categories().iter(){
+        resp += cat;
+    }
+    serde_json::to_string(cats.get_categories())
+}
+
+
+#[post("/add_category/{cat}")]
+pub async fn add_category(
+    database: web::Data<APIContainer<'static>>,
+    res: web::Path<std::path::PathBuf>
+) -> Result<HttpResponse, Error> {
+    Ok(web::block(move || add_single_category(database, res))
+        .await
+        .map(|user| HttpResponse::Created().json(user))
+        .map_err(|_| HttpResponse::InternalServerError())?)
+}
+
+fn add_single_category(
+    database: web::Data<APIContainer>,
+    res: web::Path<std::path::PathBuf>
+) -> Result<()> {
+    let mut handle = database.db.lock().unwrap();
+    let category = res.into_inner();
+    let category = category.to_str().unwrap_or("default");
+
+    handle.add_category(category);
+    handle.overrite_save_database();
+    Ok(())
+}
+
 #[post("/add")]
 pub async fn add_entry(
     database: web::Data<APIContainer<'static>>,
