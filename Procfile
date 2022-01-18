@@ -1,1 +1,1 @@
-web: ./target/release/project_catalogue
+web: ACTIX_PORT=$PORT ./target/release/project_catalogue

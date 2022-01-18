@@ -6,6 +6,7 @@ use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 mod api;
 mod db;
 
+
 async fn send_db(data: web::Data<api::APIContainer<'_>>) -> String {
     let db_str = data.db.lock().unwrap().get_database_as_string();
     db_str
@@ -14,6 +15,7 @@ async fn send_db(data: web::Data<api::APIContainer<'_>>) -> String {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     //println!("Hello, world!");
+    let port: &str = &std::env::var("ACTIX_PORT").unwrap_or("8080".to_owned());
     let test: db::ProjectInfo = db::ProjectInfo {
         id: 0,
         author: "Fesz".to_owned(),
@@ -65,7 +67,7 @@ async fn main() -> std::io::Result<()> {
             .service(api::get_file_for_project)
             .service(actix_files::Files::new("/", "./utils").index_file("index.html"))
     })
-    .bind("127.0.0.1:8080")?
+    .bind(format!("127.0.0.1:{}", port))?
     .run()
     .await
 }
