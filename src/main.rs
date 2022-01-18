@@ -15,7 +15,10 @@ async fn send_db(data: web::Data<api::APIContainer<'_>>) -> String {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     //println!("Hello, world!");
-    let port: &str = &std::env::var("ACTIX_PORT").unwrap_or("8080".to_owned());
+    let port = std::env::var("ACTIX_PORT");
+    dbg!(&port);
+    let port = &port.unwrap_or("8080".to_owned());
+    dbg!(&port);
     let test: db::ProjectInfo = db::ProjectInfo {
         id: 0,
         author: "Fesz".to_owned(),
