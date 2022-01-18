@@ -70,7 +70,7 @@ async fn main() -> std::io::Result<()> {
             .service(api::get_file_for_project)
             .service(actix_files::Files::new("/", "./utils").index_file("index.html"))
     })
-    .bind(format!("127.0.0.1:{}", port))?
+    .bind(format!("localhost:{}", port))?
     .run()
     .await
 }
