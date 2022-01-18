@@ -1,0 +1,1 @@
+web: ./target/release/project_catalogue
