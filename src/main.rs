@@ -17,7 +17,7 @@ async fn main() -> std::io::Result<()> {
     //println!("Hello, world!");
     let port = std::env::var("ACTIX_PORT");
     dbg!(&port);
-    let port = &port.unwrap_or("8080".to_owned());
+    let port = &port.unwrap_or("8080".to_owned()).parse::<u16>().unwrap();
     dbg!(&port);
     let test: db::ProjectInfo = db::ProjectInfo {
         id: 0,
@@ -70,7 +70,7 @@ async fn main() -> std::io::Result<()> {
             .service(api::get_file_for_project)
             .service(actix_files::Files::new("/", "./utils").index_file("index.html"))
     })
-    .bind(format!("localhost:{}", port))?
+    .bind(("0.0.0.0", *port))?
     .run()
     .await
 }
