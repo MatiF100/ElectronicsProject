@@ -71,6 +71,7 @@ impl<'a> MyApp<'a> {
                 std::io::ErrorKind::NotFound => match std::fs::create_dir(self.db_path) {
                     Ok(_) => {
                             self.overrite_save_database();  
+                            std::fs::create_dir(self.db_path.join("files")).unwrap();
                             println!("Database created!")
                     },
                     Err(e) => panic!("Failed to create database! Error: {}", e),
