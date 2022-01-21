@@ -1,11 +1,16 @@
+use actix_web::http::{
+    header::{ContentDisposition, DispositionType},
+    StatusCode,
+};
 use actix_web::{get, post, web, App, Error, HttpResponse, HttpServer, Responder};
 use anyhow::Result;
 use futures::{StreamExt, TryStreamExt};
+use serde::{Deserialize, Serialize};
 
-use std::io::Write;
 use std::sync::Mutex;
+use std::{alloc::handle_alloc_error, io::Write};
 
-use crate::db;
+use crate::db::{self, ProjectInfo};
 
 pub struct APIContainer<'a> {
     pub db: Mutex<db::MyApp<'a>>,
@@ -56,7 +61,7 @@ async fn save_file(
         ))?
         .parse::<i32>()
         .map_err(|_| actix_web::Error::from(actix_web::error::ParseError::Method))?;
-    handle.attatch_file(id as usize, &filepath);
+    handle.attatch_file(id as usize, None);
 
     Result::<_, actix_web::Error>::Ok("")
 }
@@ -92,7 +97,7 @@ pub async fn get_file_for_project(
     let res = res.into_inner();
     let id = res.file_name()?.to_str()?.parse::<usize>().unwrap();
     let tmp = handle.get_file_path(id)?;
-    let filepath = std::path::Path::new(tmp);
+    let filepath = *tmp;
     let file = match std::fs::read(&filepath) {
         Ok(f) => f,
         Err(e) => return Some(HttpResponse::from_error(actix_web::Error::from(e))),
@@ -110,24 +115,24 @@ pub async fn get_file_for_project(
 
 #[get("/projects")]
 pub async fn get_whole_db(database: web::Data<APIContainer<'_>>) -> impl Responder {
-    database.db.lock().unwrap().get_database_as_string()
+    HttpResponse::Ok().json(database.db.lock().unwrap().get_database_as_ref())
 }
 
 #[get("/categories")]
 pub async fn get_categories(database: web::Data<APIContainer<'_>>) -> impl Responder {
     let cats = database.db.lock().unwrap();
     let mut resp = String::new();
-    for cat in cats.get_categories().iter(){
+    for cat in cats.get_categories().iter() {
         resp += cat;
     }
-    serde_json::to_string(cats.get_categories())
+    //serde_json::to_string(cats.get_categories())
+    HttpResponse::Ok().json(cats.get_categories())
 }
-
 
 #[post("/add_category/{cat}")]
 pub async fn add_category(
     database: web::Data<APIContainer<'static>>,
-    res: web::Path<std::path::PathBuf>
+    res: web::Path<std::path::PathBuf>,
 ) -> Result<HttpResponse, Error> {
     Ok(web::block(move || add_single_category(database, res))
         .await
@@ -137,7 +142,7 @@ pub async fn add_category(
 
 fn add_single_category(
     database: web::Data<APIContainer>,
-    res: web::Path<std::path::PathBuf>
+    res: web::Path<std::path::PathBuf>,
 ) -> Result<()> {
     let mut handle = database.db.lock().unwrap();
     let category = res.into_inner();
@@ -146,6 +151,66 @@ fn add_single_category(
     handle.add_category(category);
     handle.overrite_save_database();
     Ok(())
+}
+
+#[post("/add_mp")]
+pub async fn add_entry_multipart(
+    database: web::Data<APIContainer<'static>>,
+    mut payload: actix_multipart::Multipart,
+) -> Result<HttpResponse, Error> {
+    let mut filepath_copy = String::from("");
+    let mut file_field: Vec<u8> = Vec::new();
+    let mut data_field: Vec<u8> = Vec::new();
+
+    while let Ok(Some(mut field)) = payload.try_next().await {
+        match field.content_disposition() {
+            Some(content_type) => match content_type.get_filename() {
+                Some(filename) => {
+                    filepath_copy = format!("{}", &filename);
+
+                    while let Some(chunk) = field.next().await {
+                        let data = chunk.unwrap();
+                        file_field.append(&mut data.to_vec());
+                    }
+                }
+                None => {
+                    while let Some(chunk) = field.next().await {
+                        let data = chunk.unwrap();
+                        data_field.append(&mut data.to_vec());
+                    }
+                }
+            },
+            None => (),
+        }
+    }
+
+    let mut pr_info = ProjectInfo::from_str(&String::from_utf8(data_field).unwrap()).unwrap();
+    let mut handle = database.db.lock().unwrap();
+    if pr_info.files_link == None {
+        pr_info.internal_filename = Some(filepath_copy.to_owned());
+    } else {
+        pr_info.internal_filename = None;
+    }
+    let id = handle.add_project(&pr_info).unwrap();
+
+    if let Some(_) = pr_info.internal_filename {
+        let dirpath = handle.db_path.join("files").join(format!("{}", id));
+        match std::fs::create_dir(&dirpath) {
+            Ok(_) => (),
+            Err(e) => match e.kind() {
+                std::io::ErrorKind::AlreadyExists => (),
+                _ => return Result::<_, actix_web::Error>::Err(actix_web::Error::from(e)),
+            },
+        }
+        let filepath = dirpath.join(format!("{}", filepath_copy));
+
+        let mut file = std::fs::File::create(&filepath)?;
+        file.write(&file_field)?;
+    }
+
+    handle.overrite_save_database();
+
+    Ok(HttpResponse::Ok().finish())
 }
 
 #[post("/add")]
@@ -169,11 +234,11 @@ fn add_single_entry(
         id: 0,
         author: item.author.clone(),
         academic_year: item.academic_year,
-        date: item.date,
         category: item.category.to_owned(),
         is_diploma: item.is_diploma,
         title: item.title.to_owned(),
-        files_names: item.files_names.to_owned(),
+        files_link: item.files_link.to_owned(),
+        internal_filename: None,
     };
     handle.add_project(&new_user.clone())?;
     handle.overrite_save_database();

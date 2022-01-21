@@ -1,8 +1,8 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::io::prelude::*;
 use std::path::Path;
-use std::collections::HashSet;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct Date {
@@ -22,11 +22,13 @@ pub struct ProjectInfo {
     pub id: usize,
     pub title: String,
     pub author: String,
-    pub date: i32,
     pub academic_year: i32,
     pub is_diploma: bool,
     pub category: String,
-    pub files_names: String,
+    pub files_link: Option<String>,
+
+    #[serde(default)]
+    pub internal_filename: Option<String>,
 }
 
 impl ProjectInfo {
@@ -38,7 +40,10 @@ impl ProjectInfo {
         serde_json::from_str(json).unwrap()
     }
 
-    pub fn create_file_entry() {}
+    pub fn from_str(template: &str) -> Result<Self> {
+        let item: ProjectInfo = serde_json::from_str(template).unwrap();
+        Ok(item)
+    }
 }
 
 #[derive(Debug)]
@@ -70,10 +75,10 @@ impl<'a> MyApp<'a> {
             Err(e) => match e.kind() {
                 std::io::ErrorKind::NotFound => match std::fs::create_dir(self.db_path) {
                     Ok(_) => {
-                            self.overrite_save_database();  
-                            std::fs::create_dir(self.db_path.join("files")).unwrap();
-                            println!("Database created!")
-                    },
+                        self.overrite_save_database();
+                        std::fs::create_dir(self.db_path.join("files")).unwrap();
+                        println!("Database created!")
+                    }
                     Err(e) => panic!("Failed to create database! Error: {}", e),
                 },
                 _ => panic!("Failed to open database! Error: {}", e),
@@ -95,18 +100,20 @@ impl<'a> MyApp<'a> {
         self.projects.iter_mut().filter(|pr| pr.id == id).next()
     }
 
-    pub fn add_project(&mut self, project: &ProjectInfo) -> Result<()> {
+    pub fn add_project(&mut self, project: &ProjectInfo) -> Result<usize> {
         let mut project = project.clone();
         project.id = self.next_id;
         self.next_id += 1;
         self.projects.push(project.clone());
-        Ok(())
+        Ok(project.id)
     }
 
     pub fn update_project(&mut self, id: usize, project: &ProjectInfo) -> Result<()> {
         match self.get_mut_project_by_id(id) {
             Some(pr) => *pr = project.clone(),
-            None => self.add_project(project)?,
+            None => {
+                self.add_project(project)?;
+            }
         };
         Ok(())
     }
@@ -124,25 +131,40 @@ impl<'a> MyApp<'a> {
         serde_json::to_string(&self.projects).unwrap()
     }
 
-    pub fn attatch_file(&mut self, id: usize, filepath: &Path) {
+    pub fn get_database_as_ref(&self) -> &Vec<ProjectInfo> {
+        &self.projects
+    }
+
+    pub fn attatch_file(&mut self, id: usize, filepath: Option<&str>) {
         match self.projects.iter_mut().filter(|pr| pr.id == id).next() {
-            Some(pr) => pr.files_names = filepath.to_str().unwrap().to_owned(),
+            Some(pr) => pr.files_link = filepath.map_or(None, |s| Some(s.to_owned())),
             None => (),
         }
     }
 
-    pub fn get_file_path(&self, id: usize) -> Option<&str> {
+    pub fn get_file_path(&self, id: usize) -> Option<Box<std::path::PathBuf>> {
         match self.projects.iter().filter(|pr| pr.id == id).next() {
-            Some(pr) => Some(&pr.files_names),
+            Some(pr) => match &pr.internal_filename {
+                Some(file) => {
+                    let tmp = Box::new(
+                        self.db_path
+                            .join("files")
+                            .join(format!("{}", id))
+                            .join(file),
+                    );
+                    Some(tmp)
+                }
+                None => None,
+            },
             None => None,
         }
     }
 
-    pub fn add_category(&mut self, category: &str){
+    pub fn add_category(&mut self, category: &str) {
         self.categories.insert(category.to_owned());
     }
 
-    pub fn get_categories(&self) -> &HashSet<String>{
+    pub fn get_categories(&self) -> &HashSet<String> {
         &self.categories
     }
 
