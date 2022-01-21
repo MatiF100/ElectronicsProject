@@ -3,6 +3,8 @@ use std::sync::Mutex;
 use actix_cors::Cors;
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 
+use futures::stream::StreamExt;
+
 mod api;
 mod db;
 
@@ -23,11 +25,11 @@ async fn main() -> std::io::Result<()> {
         id: 0,
         author: "Fesz".to_owned(),
         academic_year: 2021,
-        date: 2019,
         category: String::from("arduino"),
         is_diploma: false,
         title: "Test".to_owned(),
-        files_names: String::from(""),
+        files_link: None,
+        internal_filename: None,
     };
 
     let mut app = db::MyApp::new();
@@ -52,14 +54,19 @@ async fn main() -> std::io::Result<()> {
     });
 
     println!("Running...");
+
+    //    let up_form = Form::new()
+    //        .field("file", Field::file(|_, _, mut stream| async move {
+    //            while let Some(res) = stream.next().await {
+    //                res?;
+    //            }
+    //            Ok(()) as Result<_, FormError>
+    //        }))
+    //        .field("json", Field::text());
+
     HttpServer::new(move || {
         App::new()
-            .wrap(
-                Cors::default()
-                    .allow_any_origin()
-                    .allow_any_header()
-                    .allow_any_method(),
-            )
+            .wrap(Cors::permissive())
             .app_data(actix_db.clone())
             .service(echo)
             .service(api::save_file)
@@ -67,7 +74,10 @@ async fn main() -> std::io::Result<()> {
             .route("/API", web::get().to(send_db))
             .service(api::get_whole_db)
             .service(api::add_entry)
+            .service(api::add_entry_multipart)
             .service(api::get_file_for_project)
+            .service(api::get_categories)
+            .service(api::add_category)
             .service(actix_files::Files::new("/", "./utils").index_file("index.html"))
     })
     .bind(("0.0.0.0", *port))?
