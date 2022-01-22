@@ -3,6 +3,7 @@ use std::sync::Mutex;
 use actix_cors::Cors;
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 
+use actix_web_httpauth::middleware::HttpAuthentication;
 use futures::stream::StreamExt;
 
 mod api;
@@ -60,8 +61,11 @@ async fn main() -> std::io::Result<()> {
     //        .field("json", Field::text());
 
     HttpServer::new(move || {
+        //let auth = HttpAuthentication::basic(api::basic_auth_validator);
+        let auth = HttpAuthentication::basic(api::extract);
         App::new()
             .wrap(Cors::permissive())
+            .wrap(auth)
             .app_data(actix_db.clone())
             .service(echo)
             .service(api::save_file)
