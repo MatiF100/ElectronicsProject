@@ -1,8 +1,17 @@
-use actix_web::http::{
-    header::{ContentDisposition, DispositionType},
-    StatusCode,
+use actix_web::{
+    dev::ServiceRequest,
+    http::{
+        header::{ContentDisposition, DispositionType},
+        StatusCode,
+    },
 };
 use actix_web::{get, post, web, App, Error, HttpResponse, HttpServer, Responder};
+use actix_web_grants::permissions::AttachPermissions;
+use actix_web_grants::proc_macro::has_permissions;
+use actix_web_httpauth::extractors::{
+    basic::{BasicAuth, Config},
+    AuthenticationError,
+};
 use anyhow::Result;
 use futures::{StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
@@ -16,7 +25,14 @@ pub struct APIContainer<'a> {
     pub db: Mutex<db::MyApp<'a>>,
 }
 
+#[derive(Serialize, Deserialize)]
+struct AuthData{
+    login: String,
+    password: String
+}
+
 #[post("/upload/{filename}")]
+#[has_permissions("AUTH_ADMIN")]
 async fn save_file(
     filename: web::Path<std::path::PathBuf>,
     payload: web::Payload,
@@ -87,6 +103,7 @@ async fn save_file(
 //}
 
 #[get("/file/{id}")]
+#[has_permissions("AUTH_USER")]
 pub async fn get_file_for_project(
     res: web::Path<std::path::PathBuf>,
     database: web::Data<APIContainer<'_>>,
@@ -114,11 +131,13 @@ pub async fn get_file_for_project(
 }
 
 #[get("/projects")]
+#[has_permissions("AUTH_USER")]
 pub async fn get_whole_db(database: web::Data<APIContainer<'_>>) -> impl Responder {
     HttpResponse::Ok().json(database.db.lock().unwrap().get_database_as_ref())
 }
 
 #[get("/categories")]
+#[has_permissions("AUTH_USER")]
 pub async fn get_categories(database: web::Data<APIContainer<'_>>) -> impl Responder {
     let cats = database.db.lock().unwrap();
     let mut resp = String::new();
@@ -130,6 +149,7 @@ pub async fn get_categories(database: web::Data<APIContainer<'_>>) -> impl Respo
 }
 
 #[post("/add_category/{cat}")]
+#[has_permissions("AUTH_ADMIN")]
 pub async fn add_category(
     database: web::Data<APIContainer<'static>>,
     res: web::Path<std::path::PathBuf>,
@@ -154,9 +174,11 @@ fn add_single_category(
 }
 
 #[post("/add_mp")]
+#[has_permissions("AUTH_ADMIN")]
 pub async fn add_entry_multipart(
     database: web::Data<APIContainer<'static>>,
     mut payload: actix_multipart::Multipart,
+    creds: BasicAuth,
 ) -> Result<HttpResponse, Error> {
     let mut filepath_copy = String::from("");
     let mut file_field: Vec<u8> = Vec::new();
@@ -214,6 +236,7 @@ pub async fn add_entry_multipart(
 }
 
 #[post("/add")]
+#[has_permissions("AUTH_ADMIN")]
 pub async fn add_entry(
     database: web::Data<APIContainer<'static>>,
     item: web::Json<db::ProjectInfo>,
@@ -243,4 +266,37 @@ fn add_single_entry(
     handle.add_project(&new_user.clone())?;
     handle.overrite_save_database();
     Ok(())
+}
+
+async fn validate_creds(
+    user: &str,
+    pass: &Option<&std::borrow::Cow<'static, str>>,
+) -> Result<bool, std::io::Error> {
+    let auth = std::fs::read_to_string("auth.json")?;
+    let auth:AuthData = serde_json::from_str(&auth).unwrap();
+    match pass {
+        Some(pass) => {
+            if user.eq(&auth.login) && pass.trim().eq(&auth.password) {
+                Ok(true)
+            } else {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Invalid username and/or password",
+                ))
+            }
+        }
+        None => Ok(false),
+    }
+}
+
+pub async fn extract(req: ServiceRequest, creds: BasicAuth) -> Result<ServiceRequest, Error> {
+    let mut grants = vec!["AUTH_USER".to_string()];
+
+    match validate_creds(creds.user_id(), &creds.password()).await {
+        Ok(true) => grants.push("AUTH_ADMIN".to_string()),
+        Ok(false) => (),
+        Err(_) => (),
+    }
+    req.attach(grants);
+    Ok(req)
 }
