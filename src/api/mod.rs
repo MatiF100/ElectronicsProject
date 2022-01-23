@@ -1,3 +1,4 @@
+use actix_web::{delete, get, post, web, App, Error, HttpResponse, HttpServer, Responder};
 use actix_web::{
     dev::ServiceRequest,
     http::{
@@ -5,7 +6,6 @@ use actix_web::{
         StatusCode,
     },
 };
-use actix_web::{get, post, web, App, Error, HttpResponse, HttpServer, Responder};
 use actix_web_grants::permissions::AttachPermissions;
 use actix_web_grants::proc_macro::has_permissions;
 use actix_web_httpauth::extractors::{
@@ -26,14 +26,47 @@ pub struct APIContainer<'a> {
 }
 
 #[derive(Serialize, Deserialize)]
-struct AuthData{
+struct AuthData {
     login: String,
-    password: String
+    password: String,
+}
+
+#[delete("/delete/{id}")]
+#[has_permissions("AUTH_ADMIN")]
+pub async fn delete_entry(
+    database: web::Data<APIContainer<'_>>,
+    res: web::Path<std::path::PathBuf>,
+) -> impl Responder {
+    let mut handle = database.db.lock().unwrap();
+    let id = res.into_inner();
+    let id = id
+        .file_name()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .parse::<usize>()
+        .unwrap();
+
+
+    if let Some(project) = handle.get_project_by_id(id) {
+        if let Some(_) = project.internal_filename {
+            if let Err(_) = std::fs::remove_dir_all(handle.db_path.join("files").join(format!("{}", id))){
+                println!("File was already removed! Check for unauthorized database access");
+            }
+        }
+    }else{
+        return Err(actix_web::Error::from(std::io::Error::from(std::io::ErrorKind::NotFound)));
+    }
+    handle.remove_by_id(id);
+
+    handle.overrite_save_database();
+
+    Result::<_, actix_web::Error>::Ok("")
 }
 
 #[post("/upload/{filename}")]
 #[has_permissions("AUTH_ADMIN")]
-async fn save_file(
+pub async fn save_file(
     filename: web::Path<std::path::PathBuf>,
     payload: web::Payload,
     database: web::Data<APIContainer<'_>>,
@@ -82,28 +115,8 @@ async fn save_file(
     Result::<_, actix_web::Error>::Ok("")
 }
 
-//#[get("/file")]
-//async fn route_function_example(
-//    payload: Multipart
-//) -> Result<HttpResponse, ()> {
-
-//    let upload_status = save_file(payload, "/path/filename.jpg").await;
-
-//    match upload_status {
-//        Some(true) => {
-
-//            Ok(HttpResponse::Ok()
-//                .content_type("text/plain")
-//                .body("update_succeeded"))
-//        }
-//        _ => Ok(HttpResponse::BadRequest()
-//            .content_type("text/plain")
-//            .body("update_failed")),
-//    }
-//}
 
 #[get("/file/{id}")]
-#[has_permissions("AUTH_USER")]
 pub async fn get_file_for_project(
     res: web::Path<std::path::PathBuf>,
     database: web::Data<APIContainer<'_>>,
@@ -131,13 +144,11 @@ pub async fn get_file_for_project(
 }
 
 #[get("/projects")]
-#[has_permissions("AUTH_USER")]
 pub async fn get_whole_db(database: web::Data<APIContainer<'_>>) -> impl Responder {
     HttpResponse::Ok().json(database.db.lock().unwrap().get_database_as_ref())
 }
 
 #[get("/categories")]
-#[has_permissions("AUTH_USER")]
 pub async fn get_categories(database: web::Data<APIContainer<'_>>) -> impl Responder {
     let cats = database.db.lock().unwrap();
     let mut resp = String::new();
@@ -178,7 +189,6 @@ fn add_single_category(
 pub async fn add_entry_multipart(
     database: web::Data<APIContainer<'static>>,
     mut payload: actix_multipart::Multipart,
-    creds: BasicAuth,
 ) -> Result<HttpResponse, Error> {
     let mut filepath_copy = String::from("");
     let mut file_field: Vec<u8> = Vec::new();
@@ -273,7 +283,7 @@ async fn validate_creds(
     pass: &Option<&std::borrow::Cow<'static, str>>,
 ) -> Result<bool, std::io::Error> {
     let auth = std::fs::read_to_string("auth.json")?;
-    let auth:AuthData = serde_json::from_str(&auth).unwrap();
+    let auth: AuthData = serde_json::from_str(&auth).unwrap();
     match pass {
         Some(pass) => {
             if user.eq(&auth.login) && pass.trim().eq(&auth.password) {
