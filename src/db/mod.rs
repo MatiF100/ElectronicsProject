@@ -168,6 +168,10 @@ impl<'a> MyApp<'a> {
         &self.categories
     }
 
+    pub fn remove_by_id(&mut self, id: usize) {
+        self.projects.retain(|x| x.id != id);
+    }
+
     //Not unsafe per definition, but can break compability between database backups
     pub unsafe fn reinitialize_ids(&mut self) {
         self.projects
