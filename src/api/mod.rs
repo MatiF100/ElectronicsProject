@@ -1,23 +1,14 @@
-use actix_web::{delete, get, post, web, App, Error, HttpResponse, HttpServer, Responder};
-use actix_web::{
-    dev::ServiceRequest,
-    http::{
-        header::{ContentDisposition, DispositionType},
-        StatusCode,
-    },
-};
+use actix_web::dev::ServiceRequest;
+use actix_web::{delete, get, post, web, Error, HttpResponse, Responder};
 use actix_web_grants::permissions::AttachPermissions;
 use actix_web_grants::proc_macro::has_permissions;
-use actix_web_httpauth::extractors::{
-    basic::{BasicAuth, Config},
-    AuthenticationError,
-};
+use actix_web_httpauth::extractors::basic::BasicAuth;
 use anyhow::Result;
 use futures::{StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
 
+use std::io::Write;
 use std::sync::Mutex;
-use std::{alloc::handle_alloc_error, io::Write};
 
 use crate::db::{self, ProjectInfo};
 
@@ -29,6 +20,12 @@ pub struct APIContainer<'a> {
 struct AuthData {
     login: String,
     password: String,
+}
+
+#[get("/check")]
+#[has_permissions("AUTH_ADMIN")]
+pub async fn verify() -> impl Responder {
+    Result::<_, actix_web::Error>::Ok("")
 }
 
 #[delete("/delete/{id}")]
@@ -47,15 +44,18 @@ pub async fn delete_entry(
         .parse::<usize>()
         .unwrap();
 
-
     if let Some(project) = handle.get_project_by_id(id) {
         if let Some(_) = project.internal_filename {
-            if let Err(_) = std::fs::remove_dir_all(handle.db_path.join("files").join(format!("{}", id))){
+            if let Err(_) =
+                std::fs::remove_dir_all(handle.db_path.join("files").join(format!("{}", id)))
+            {
                 println!("File was already removed! Check for unauthorized database access");
             }
         }
-    }else{
-        return Err(actix_web::Error::from(std::io::Error::from(std::io::ErrorKind::NotFound)));
+    } else {
+        return Err(actix_web::Error::from(std::io::Error::from(
+            std::io::ErrorKind::NotFound,
+        )));
     }
     handle.remove_by_id(id);
 
@@ -114,7 +114,6 @@ pub async fn save_file(
 
     Result::<_, actix_web::Error>::Ok("")
 }
-
 
 #[get("/file/{id}")]
 pub async fn get_file_for_project(
