@@ -1,19 +1,12 @@
 use std::sync::Mutex;
 
 use actix_cors::Cors;
-use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{web, App, HttpServer};
 
 use actix_web_httpauth::middleware::HttpAuthentication;
-use futures::stream::StreamExt;
 
 mod api;
 mod db;
-
-
-async fn send_db(data: web::Data<api::APIContainer<'_>>) -> String {
-    let db_str = data.db.lock().unwrap().get_database_as_string();
-    db_str
-}
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -45,7 +38,8 @@ async fn main() -> std::io::Result<()> {
                     .service(api::add_entry)
                     .service(api::add_entry_multipart)
                     .service(api::add_category)
-                    .service(api::delete_entry),
+                    .service(api::delete_entry)
+                    .service(api::verify),
             )
             .service(api::get_whole_db)
             .service(api::get_file_for_project)
