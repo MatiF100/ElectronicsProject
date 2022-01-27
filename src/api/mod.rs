@@ -17,9 +17,21 @@ pub struct APIContainer<'a> {
 }
 
 #[derive(Serialize, Deserialize)]
-struct AuthData {
+pub struct AuthData {
     login: String,
     password: String,
+}
+
+#[post("/reauth")]
+#[has_permissions("AUTH_ADMIN")]
+pub async fn change_creds(item: web::Json<AuthData>) -> Result<HttpResponse, Error> {
+    let creds = item.into_inner();
+    let data = serde_json::to_string(&creds)?;
+    let bytes = data.as_bytes();
+    let mut file = std::fs::File::create("auth.json")?;
+    file.write_all(bytes)?;
+
+    Ok(HttpResponse::Accepted().finish())
 }
 
 #[get("/check")]
