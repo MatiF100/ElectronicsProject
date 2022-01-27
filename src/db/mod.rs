@@ -105,6 +105,12 @@ impl<'a> MyApp<'a> {
         project.id = self.next_id;
         self.next_id += 1;
         self.projects.push(project.clone());
+
+        let cat = project.category;
+        if !self.categories.contains(&cat) {
+            self.add_category(&cat);
+        }
+
         Ok(project.id)
     }
 

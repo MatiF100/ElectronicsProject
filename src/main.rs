@@ -33,7 +33,8 @@ async fn main() -> std::io::Result<()> {
                     .service(api::add_entry_multipart)
                     .service(api::add_category)
                     .service(api::delete_entry)
-                    .service(api::verify),
+                    .service(api::verify)
+                    .service(api::change_creds),
             )
             .service(api::get_whole_db)
             .service(api::get_file_for_project)
