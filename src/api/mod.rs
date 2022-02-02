@@ -234,7 +234,7 @@ pub async fn add_entry_multipart(
     } else {
         pr_info.internal_filename = None;
     }
-    let id = handle.add_project(&pr_info).unwrap();
+    let id = handle.get_next_id();
 
     if let Some(_) = pr_info.internal_filename {
         let dirpath = handle.db_path.join("files").join(format!("{}", id));
@@ -251,6 +251,7 @@ pub async fn add_entry_multipart(
         file.write(&file_field)?;
     }
 
+    handle.add_project(&pr_info).unwrap();
     handle.overrite_save_database();
 
     Ok(HttpResponse::Ok().finish())

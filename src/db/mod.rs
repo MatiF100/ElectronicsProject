@@ -86,6 +86,10 @@ impl<'a> MyApp<'a> {
         };
     }
 
+    pub fn get_next_id(&self) -> usize{
+        self.next_id
+    }
+
     pub fn load_projects(&mut self) {
         let db = std::fs::read_to_string("./database/db.json").unwrap();
         let cat = std::fs::read_to_string("./database/cat.json").unwrap();
